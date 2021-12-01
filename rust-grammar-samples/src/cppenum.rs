@@ -3,7 +3,7 @@ pub const RED: ColorType = 0;
 pub const GREEN: ColorType = 1;
 pub const BLUE: ColorType = 2;
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Color(usize);
 
 impl Color {
@@ -14,24 +14,64 @@ impl Color {
     pub fn to_usize(&self) -> usize { self.0 }
 }
 
+#[derive(FromPrimitive, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum ColorEnum {
+    Red,
+    Green,
+    Blue,
+}
+
 fn print_color_type(c: ColorType) {
-    println!("c: ColorType = {}", c);
+    println!("{:?}", c); // 1 (cが1のとき)
 }
 
 fn print_color(c: Color) {
-    println!("c: Color = {}", c.to_usize());
+    println!("{:?}", c); // Color(1) (cが1のとき)
 }
 
-pub fn cppenum() {
+fn print_color_enum(c: ColorEnum) {
+    println!("{:?}", c); // Green (cが1のとき)
+}
+
+pub fn use_color_type() {
     let v = vec![1, 2, 3];
     let ct = RED;
     println!("{}", v[ct]); // Vecの添字に使用可能
-    print_color_type(0);
+    let n: usize = 1;
+    print_color_type(n); // usizeの変数をそのまま入れられる
+    println!("{:?}", ct < GREEN); // true
+    println!("{:?}", ct == RED); // true
+    for c in RED..BLUE { // for文の範囲にも使用可能
+        println!("{}", c);
+    }
+}
+pub fn use_color_struct() {
+    let v = vec![1, 2, 3];
     let cs = Color::RED;
     // error[E0277]: the type `[{integer}]` cannot be indexed by `Color`
     // println!("{}", v[cs]); // structは直接添字に使用できない
     println!("{}", v[cs.to_usize()]);
     let n: usize = 1;
     print_color(Color::from_usize(n));
-
+    println!("{:?}", cs < Color::GREEN); // true
+    println!("{:?}", cs == Color::RED); // true
+    // for文の範囲指定ではto_usizeが必要（もしくはColorにIteratorを実装）
+    for c in Color::RED.to_usize()..Color::BLUE.to_usize() {
+        println!("{}", c);
+    }
+}
+pub fn use_color_enum() {
+    let v = vec![1, 2, 3];
+    let ce = ColorEnum::Red;
+    // error[E0277]: the type `[{integer}]` cannot be indexed by `ColorEnum`
+    // println!("{}", v[ce]); // enumは直接添字に使用できない
+    println!("{}", v[ce as usize]); // enum -> usizeへはasでキャスト可能
+    let n: usize = 1;
+    print_color_enum(num::FromPrimitive::from_usize(n).unwrap());
+    println!("{:?}", ce < ColorEnum::Green); // true
+    println!("{:?}", ce == ColorEnum::Red); // true
+    // for文の範囲指定ではas usizeが必要。（もしくはColorEnumにIteratorを実装）
+    for c in ColorEnum::Red as usize..ColorEnum::Blue as usize {
+        println!("{}", c as usize);
+    }
 }
