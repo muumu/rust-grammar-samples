@@ -15,6 +15,7 @@ impl Color {
 }
 
 #[derive(FromPrimitive, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[repr(usize)]
 enum ColorEnum {
     Red,
     Green,
@@ -44,6 +45,7 @@ pub fn use_color_type() {
     for c in RED..BLUE { // for文の範囲にも使用可能
         println!("{}", c);
     }
+    println!("size_of ColorType: {}", std::mem::size_of::<ColorType>());
 }
 pub fn use_color_struct() {
     let v = vec![1, 2, 3];
@@ -59,6 +61,7 @@ pub fn use_color_struct() {
     for c in Color::RED.to_usize()..Color::BLUE.to_usize() {
         println!("{}", c);
     }
+    println!("size_of Color: {}", std::mem::size_of::<Color>());
 }
 pub fn use_color_enum() {
     let v = vec![1, 2, 3];
@@ -74,4 +77,5 @@ pub fn use_color_enum() {
     for c in ColorEnum::Red as usize..ColorEnum::Blue as usize {
         println!("{}", c as usize);
     }
+    println!("size_of ColorEnum: {}", std::mem::size_of::<ColorEnum>());
 }
