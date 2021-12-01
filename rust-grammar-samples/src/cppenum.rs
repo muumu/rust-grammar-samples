@@ -1,8 +1,19 @@
+// 型チェックによるusizeとの区別が不要な場合はエイリアスが便利
 pub type ColorType = usize;
 pub const RED: ColorType = 0;
 pub const GREEN: ColorType = 1;
 pub const BLUE: ColorType = 2;
 
+pub trait Foo {
+    fn foo(&self) { println!("foo!"); }
+}
+
+impl Foo for ColorType {}
+
+// 以下の場合はタプル構造体が便利
+// 1. 型チェックは欲しいが範囲外の数値は気にしない場合
+// 2. 様々な数値型にキャストしたい場合
+// 3. 様々な数値型からゼロコストで生成したい場合
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Color(pub usize); // モジュール外からColor(1)のように初期化をするならpubの指定が必要
 
@@ -12,6 +23,7 @@ impl Color {
     pub const BLUE: Self = Self(2);
 }
 
+// 型チェックと範囲外の数値のエラーハンドリングが必要な場合はenumが安全で便利
 #[derive(FromPrimitive, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(usize)]
 enum ColorEnum {
@@ -44,6 +56,8 @@ pub fn use_color_type() {
         println!("{}", c);
     }
     println!("size_of ColorType: {}", std::mem::size_of::<ColorType>());
+    RED.foo(); // ColorTypeにimplしたfoo関数の呼び出し
+    1.foo(); // ColorTypeにimplするとusizeにもimplしたことになる
 }
 pub fn use_color_struct() {
     let v = vec![1, 2, 3];
