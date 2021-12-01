@@ -4,14 +4,12 @@ pub const GREEN: ColorType = 1;
 pub const BLUE: ColorType = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct Color(usize);
+pub struct Color(pub usize); // モジュール外からColor(1)のように初期化をするならpubの指定が必要
 
 impl Color {
     pub const RED: Self = Self(0);
     pub const GREEN: Self = Self(1);
     pub const BLUE: Self = Self(2);
-    pub fn from_usize(n: usize) -> Self { Self(n) }
-    pub fn to_usize(&self) -> usize { self.0 }
 }
 
 #[derive(FromPrimitive, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -52,13 +50,13 @@ pub fn use_color_struct() {
     let cs = Color::RED;
     // error[E0277]: the type `[{integer}]` cannot be indexed by `Color`
     // println!("{}", v[cs]); // structは直接添字に使用できない
-    println!("{}", v[cs.to_usize()]);
+    println!("{}", v[cs.0]); // タプル構造体の1つ目のメンバは0でアクセス可能
     let n: usize = 1;
-    print_color(Color::from_usize(n));
+    print_color(Color(n)); // タプル構造体の初期化
     println!("{:?}", cs < Color::GREEN); // true
     println!("{:?}", cs == Color::RED); // true
-    // for文の範囲指定ではto_usizeが必要（もしくはColorにIteratorを実装）
-    for c in Color::RED.to_usize()..Color::BLUE.to_usize() {
+    // for文の範囲指定では.0でusizeのメンバを取り出す（もしくはColorにIteratorを実装）
+    for c in Color::RED.0..Color::BLUE.0 {
         println!("{}", c);
     }
     println!("size_of Color: {}", std::mem::size_of::<Color>());
