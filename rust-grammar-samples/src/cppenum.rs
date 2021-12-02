@@ -4,12 +4,6 @@ pub const RED: ColorType = 0;
 pub const GREEN: ColorType = 1;
 pub const BLUE: ColorType = 2;
 
-pub trait Foo {
-    fn foo(&self) { println!("foo!"); }
-}
-
-impl Foo for ColorType {}
-
 // 以下の場合はタプル構造体が便利
 // 1. 型チェックは欲しいが範囲外の数値は気にしない場合
 // 2. 様々な数値型にキャストしたい場合
@@ -23,9 +17,20 @@ impl Color {
     pub const BLUE: Self = Self(2);
 }
 
+impl std::fmt::Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            Color::RED => write!(f, "Color::RED"),
+            Color::GREEN => write!(f, "Color::GREEN"),
+            Color::BLUE => write!(f, "Color::BLUE"),
+            _ => write!(f, "{}", self.0),
+        }
+    }
+}
+
 // 型チェックと範囲外の数値のエラーハンドリングが必要な場合はenumが安全で便利
 #[derive(FromPrimitive, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-#[repr(usize)]
+#[repr(usize)] // これを指定すると各値がusizeに
 enum ColorEnum {
     Red,
     Green,
@@ -52,13 +57,16 @@ pub fn use_color_type() {
     print_color_type(n); // usizeの変数をそのまま入れられる
     println!("{:?}", ct < GREEN); // true
     println!("{:?}", ct == RED); // true
-    for c in RED..BLUE { // for文の範囲にも使用可能
+    for c in RED..=BLUE { // for文の範囲にも使用可能
         println!("{}", c);
     }
-    println!("size_of ColorType: {}", std::mem::size_of::<ColorType>());
+    println!("size_of ColorType: {}", std::mem::size_of::<ColorType>()); // 8 (64 bits)
+    pub trait Foo { fn foo(&self) { println!("foo!"); } }
+    impl Foo for ColorType {}
     RED.foo(); // ColorTypeにimplしたfoo関数の呼び出し
     1.foo(); // ColorTypeにimplするとusizeにもimplしたことになる
 }
+
 pub fn use_color_struct() {
     let v = vec![1, 2, 3];
     let cs = Color::RED;
@@ -70,11 +78,13 @@ pub fn use_color_struct() {
     println!("{:?}", cs < Color::GREEN); // true
     println!("{:?}", cs == Color::RED); // true
     // for文の範囲指定では.0でusizeのメンバを取り出す（もしくはColorにIteratorを実装）
-    for c in Color::RED.0..Color::BLUE.0 {
+    for c in Color::RED.0..=Color::BLUE.0 {
         println!("{}", c);
     }
-    println!("size_of Color: {}", std::mem::size_of::<Color>());
+    println!("size_of Color: {}", std::mem::size_of::<Color>()); // 8 (64 bits)
+    println!("{}", cs); // Color::RED
 }
+
 pub fn use_color_enum() {
     let v = vec![1, 2, 3];
     let ce = ColorEnum::Red;
@@ -86,8 +96,42 @@ pub fn use_color_enum() {
     println!("{:?}", ce < ColorEnum::Green); // true
     println!("{:?}", ce == ColorEnum::Red); // true
     // for文の範囲指定ではas usizeが必要。（もしくはColorEnumにIteratorを実装）
-    for c in ColorEnum::Red as usize..ColorEnum::Blue as usize {
+    for c in ColorEnum::Red as usize..=ColorEnum::Blue as usize {
         println!("{}", c as usize);
     }
-    println!("size_of ColorEnum: {}", std::mem::size_of::<ColorEnum>());
+    println!("size_of ColorEnum: {}", std::mem::size_of::<ColorEnum>()); // 8 (64 bits)
+    println!("size_of ColorEnum::Red: {}", std::mem::size_of_val(&ColorEnum::Red)); // 8 (64 bits)
 }
+
+/* C++におけるenum
+#include <iostream>
+#include <vector>
+
+enum Color {
+    Red,
+    Green,
+    Blue
+};
+
+void print(Color c) {
+    std::cout << c << std::endl;
+}
+
+int main() {
+    std::vector<int> v = {1, 2, 3};
+    Color c = Color::Red;
+    std::cout << v[c] << std::endl; // vectorの添字としてそのまま使用可能
+    // error: invalid conversion from 'int' to 'Color' [-fpermissive]
+    // print(0); // enum型にキャストしないとコンパイルエラー
+    print(static_cast<Color>(1)); // キャストすればOK
+    print(static_cast<Color>(100)); // しかし範囲外の値もキャストできてしまう
+    std::cout << (c < Color::Green) << std::endl; // 1 (true)
+    std::cout << (c == Color::Red) << std::endl; // 1 (true)
+    // enumは++や+=が使用できないので、static_castでunsignedに変換してからenumに戻す必要あり
+    for (Color i = Color::Red; i <= Color::Blue; i = static_cast<Color>(static_cast<unsigned>(i) + 1)) {
+        std::cout << i << std::endl;
+    }
+    std::cout << sizeof(Color) << std::endl; // 4 (32 bits)
+    std::cout << (sizeof Color::Red) << std::endl; // 4 (32 bits)
+}
+ */
