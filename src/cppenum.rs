@@ -31,7 +31,7 @@ impl std::fmt::Display for Color {
 // 型チェックと範囲外の数値のエラーハンドリングが必要な場合はenumが安全で便利
 #[derive(FromPrimitive, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(usize)] // これを指定すると各値がusizeに
-enum ColorEnum {
+pub enum ColorEnum {
     Red,
     Green,
     Blue,
