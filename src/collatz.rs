@@ -138,6 +138,7 @@ pub fn collatz(n: u64, mut v: Vec<u64>) -> Vec<u64> {
 }
 
 fn collatz_len_max_with_cache(n: u64, cache: &Arc<impl Cache>) -> (usize, u64) {
+    // thread::sleep(std::time::Duration::from_micros(10));
     if n == 1 {
         (1, 1)
     } else {
@@ -154,6 +155,7 @@ fn collatz_len_max_with_cache(n: u64, cache: &Arc<impl Cache>) -> (usize, u64) {
 }
 
 fn collatz_len_max(n: u64) -> (usize, u64) {
+    // thread::sleep(std::time::Duration::from_micros(10));
     if n == 1 {
         (1, 1)
     } else {
