@@ -6,6 +6,7 @@ mod cppenum;
 mod collatz;
 mod threads_playground;
 mod indexed_value;
+mod probability_search;
 
 use std::time::Instant;
 use crate::collatz::{Cache, RwLockCache, MutexCache, NoCache};
@@ -51,4 +52,5 @@ fn main() {
     let v = collatz::collatz(80049391, Vec::<u64>::new());
     println!("len = {}, max_value = {}", v.len(), v.iter().max().unwrap());
     threads_playground::threads_playground();
+    probability_search::calc_probabilities();
 }
