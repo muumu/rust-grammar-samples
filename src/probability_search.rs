@@ -1,9 +1,17 @@
 use std::time::Instant;
 use std::sync::{Mutex, Arc, RwLock};
-// use std::sync::atomic;
-// use std::sync::atomic::AtomicUsize;
 use std::cell::RefCell;
 use std::marker::{Sync, Send};
+
+/*
+解きたい問題
+毎回ランダムに配られる3色のカラーボールを2つの筒に1個ずつ入れていきます。
+1つの筒には最大6個のカラーボールを1列に積むことができます。
+12個のカラーボールを2つの筒に入れ終わった時点で、いずれかまたは両方の筒において
+同色のカラーボールが4つ以上接しているようにカラーボールを積める確率を求めてください。
+なお、手元のカラーボールを積むまで次にどの色が来るかは見ることができないものとし、
+カラーボールをどちらの筒に入れるかは求める確率が最大となるように選択する（その時点での最善手を選択する）ものとします。
+ */
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Color {
@@ -35,12 +43,12 @@ impl Color {
     }
 }
 
+// width個の筒にカラーボールをheight個積むことができる筒のセットの状態を表現する構造体
 #[derive(Clone, Debug)]
 pub struct Board {
     board: Vec<Vec<Option<Color>>>
 }
 
-// width個の筒にカラーボールをheight個積むことができる筒のセットの状態を表現するもの
 impl Board {
     pub fn with_size(width: usize, height: usize) -> Self {
         let mut board = vec![];
@@ -87,7 +95,7 @@ impl Board {
     //     data
     // }
 
-    // Boardの状態のビット表現。筒の並びは問わないため要素数順にソートする
+    // Boardの状態のビット表現。筒の並びは問わないため筒のビット表現の値順にソートする
     pub fn serialize(&self) -> usize {
         let mut v = vec![];
         for line in &self.board {
@@ -141,14 +149,18 @@ pub trait Cache {
     fn set(&self, board: &Board, data: f64);
 }
 
+// シングルスレッド用のキャッシュ構造体
+// MutexCache / RwLockCacheとインターフェースを共通化するためRefCellで包んでいる
 pub struct RefCellCache {
     cache: Vec<RefCell<Option<f64>>>,
 }
 
+// Mutexを使用したスレッドセーフなキャッシュ構造体
 pub struct MutexCache {
     cache: Vec<Mutex<Option<f64>>>,
 }
 
+// RwLockを使用したスレッドセーフなキャッシュ構造体
 pub struct RwLockCache {
     cache: Vec<RwLock<Option<f64>>>,
 }
@@ -238,7 +250,13 @@ impl Cache for NoCache {
     fn set(&self, _: &Board, _: f64) { }
 }
 
-fn probability(n: usize, board: Board, connection_size: usize, cache: &impl Cache) -> f64 {
+// 条件を満たす確率を求める関数
+// Cacheを使用する場合と使用しない場合とで共通の実装になっているが
+// Cacheトレイト実装型として引数に与えられる型は静的ディスパッチで決定されるため
+// NoCacheを与えた場合はコンパイラの最適化によりキャッシュ処理のコードは削除される
+pub fn probability(n: usize, board: Board, connection_size: usize, cache: &impl Cache) -> f64 {
+    // 最後まで積み終わった状態で、設定された連結数以上に連結があれば条件を満たす
+    // 条件を満たしている場合は確率1、満たしていない場合は確率0を返す
     if n == 0 {
         if board.is_connected(connection_size) {
             1.0
@@ -246,17 +264,21 @@ fn probability(n: usize, board: Board, connection_size: usize, cache: &impl Cach
             0.0
         }
     } else {
+        // キャッシュがある場合はキャッシュの値を返す（NoCacheの場合は常に存在しない）
         if let Some(c) = cache.get(&board) {
             return c;
         }
         let mut sum = 0.0;
+        // ランダムに来るn色の場合の確率をそれぞれ計算してsumに足していく
         for color in Color::all() {
             let mut max = 0.0;
+            // どの筒に入れるかは、入れた場合にもっとも確率が高くなる方に入れるという判断をする
+            // もっとも確率が高くなる方に入れた場合の確率がmax変数に入る
             for x in 0..board.width() {
-                let mut board = board.clone();
                 if board.top(x) >= board.height() {
                     continue;
                 }
+                let mut board = board.clone();
                 board.drop(x, color);
                 let p = probability(n - 1, board, connection_size, cache);
                 if p > max {
@@ -265,27 +287,31 @@ fn probability(n: usize, board: Board, connection_size: usize, cache: &impl Cach
             }
             sum += max;
         }
+        // sumを色数で割って得られる確率の平均値が求める確率
         let p = sum / Color::len() as f64;
+        // 得られた確率はキャッシュにも格納しておく（NoCacheの場合は何もしない）
         cache.set(&board, p);
         p
     }
 }
 
-fn probability_parallel<T>(n: usize, threaded_n: usize, board: Board,
+// threaded_n回目の呼び出しまでスレッドを立ち上げて並列計算を実施
+pub fn probability_parallel<T>(n: usize, threaded_n: usize, board: Board,
                            connection_size: usize, cache: &Arc<T>) -> f64
     where T: Cache + Sync + Send + 'static
 {
     if n <= 1 || threaded_n == 0 {
+        // 以降の計算は各スレッドにおいて直列処理を呼び出して処理を続行
         probability(n, board, connection_size, cache.as_ref())
     } else {
         let mut handles_map = vec![];
         for color in Color::all() {
             handles_map.push(vec![]);
             for x in 0..board.width() {
-                let mut board = board.clone();
                 if board.top(x) >= board.height() {
                     continue;
                 }
+                let mut board = board.clone();
                 let cache = Arc::clone(&cache);
                 let handle = std::thread::spawn(move || {
                     //println!("thread spawned: n = {}, x = {}, color = {}", n, x, color as usize);
@@ -310,71 +336,77 @@ fn probability_parallel<T>(n: usize, threaded_n: usize, board: Board,
     }
 }
 
+pub fn print_elapsed_times(elapsed_nanos: &Vec<u128>, label: &str) {
+    let unit = 1_000_000_000.0;
+    println!("{} (min): {:.4} [s]", label, *elapsed_nanos.iter().min().unwrap() as f64 / unit);
+    println!("{} (max): {:.4} [s]", label, *elapsed_nanos.iter().max().unwrap() as f64 / unit);
+    println!("{} (mean): {:.4} [s]", label,
+             elapsed_nanos.iter().sum::<u128>() as f64 / (unit * elapsed_nanos.len() as f64));
+}
 
 pub fn calc_probabilities() {
-    let width = 2;
-    let height = 6;
-    let n = 12;
-    let connection_size = 4;
-    let threaded_n = 2;
+    let width = 2; // 筒の個数
+    let height = 6; // 1本の筒に積めるカラーボール最大数
+    let n = 12; // カラーボールを積む総数
+    let connection_size = 4; // 条件を満たすのに必要な同色のカラーボールの連結数
+    let threaded_n = 2; // スレッドを立ち上げる再帰の深さ（2なら色数3、筒数2のとき6 + 6 * 6 = 42スレッド）
     let cache_size = 2usize.pow((width * height * Color::bits()) as u32);
+    let board = Board::with_size(width, height);
     println!("cache_size = {}", cache_size);
-    // {
-    //     let board = Board::with_size(width, height);
-    //     let cache = Arc::new(NoCache::with_len(0));
-    //     let start = Instant::now();
-    //     let p = search_parallel(n, threaded_n, board, connection_size, &cache);
-    //     let end = start.elapsed();
-    //     println!("p = {}", p);
-    //     println!("{}.{:03} [s]", end.as_secs(), end.subsec_nanos() / 1_000_000);
-    // }
-    // {
-    //     let board = Board::with_size(width, height);
-    //     let cache = Arc::new(NoCache::with_len(0));
-    //     let start = Instant::now();
-    //     let p = search_parallel(n, threaded_n, board, connection_size, &cache);
-    //     let end = start.elapsed();
-    //     println!("p = {}", p);
-    //     println!("{}.{:03} [s]", end.as_secs(), end.subsec_nanos() / 1_000_000);
-    // }
-    // {
-    //     let board = Board::with_size(width, height);
-    //     let start = Instant::now();
-    //     let p = search(n, board, connection_size, &NoCache::with_len(0));
-    //     let end = start.elapsed();
-    //     println!("p = {}", p);
-    //     println!("{}.{:03} [s]", end.as_secs(), end.subsec_nanos() / 1_000_000);
-    // }
-    for _ in 0..3 {
-        {
-            let board = Board::with_size(width, height);
-            let cache = RefCellCache::with_len(cache_size);
-            //let cache = MutexCache::with_len(CACHE_SIZE);
-            let start = Instant::now();
-            let p = probability(n, board, connection_size, &cache);
-            let end = start.elapsed();
-            println!("p = {}", p);
-            println!("{}.{:03} [s]", end.as_secs(), end.subsec_nanos() / 1_000_000);
-        }
-        {
-            let board = Board::with_size(width, height);
-            let cache = Arc::new(MutexCache::with_len(cache_size));
-            //let cache = Arc::new(RefCellCache::with_len(CACHE_SIZE));
-            let start = Instant::now();
-            let p = probability_parallel(n, threaded_n, board, connection_size, &cache);
-            let end = start.elapsed();
-            println!("p = {}", p);
-            println!("{}.{:03} [s]", end.as_secs(), end.subsec_nanos() / 1_000_000);
-        }
-        {
-            let board = Board::with_size(width, height);
-            let cache = Arc::new(RwLockCache::with_len(cache_size));
-            let start = Instant::now();
-            let p = probability_parallel(n, threaded_n, board, connection_size, &cache);
-            let end = start.elapsed();
-            println!("p = {}", p);
-            println!("{}.{:03} [s]", end.as_secs(), end.subsec_nanos() / 1_000_000);
-        }
+    // 処理時間にばらつきが生じるためそれぞれ3回計測
+    let repeat_num = 3;
+    // 直列処理キャッシュ無し
+    let mut elapsed_nanos = vec![];
+    for _ in 0..repeat_num {
+        let start = Instant::now();
+        let p = probability(n, board.clone(), connection_size, &NoCache::with_len(0));
+        let end = start.elapsed();
+        elapsed_nanos.push(end.as_nanos());
+        println!("p = {} (elapsed: {:.4})", p, end.as_nanos() as f64 / 1_000_000_000.0);
     }
-
+    print_elapsed_times(&elapsed_nanos, "Serial without cache");
+    // 並列処理キャッシュ無し
+    let mut elapsed_nanos = vec![];
+    for _ in 0..repeat_num {
+        let cache = Arc::new(NoCache::with_len(0));
+        let start = Instant::now();
+        let p = probability_parallel(n, threaded_n, board.clone(), connection_size, &cache);
+        let end = start.elapsed();
+        elapsed_nanos.push(end.as_nanos());
+        println!("p = {} (elapsed: {:.4})", p, end.as_nanos() as f64 / 1_000_000_000.0);
+    }
+    print_elapsed_times(&elapsed_nanos, "Parallel without cache");
+    // 直列処理RefCellキャッシュ使用
+    let mut elapsed_nanos = vec![];
+    for _ in 0..repeat_num {
+        let cache = RefCellCache::with_len(cache_size);
+        let start = Instant::now();
+        let p = probability(n, board.clone(), connection_size, &cache);
+        let end = start.elapsed();
+        elapsed_nanos.push(end.as_nanos());
+        println!("p = {} (elapsed: {:.4})", p, end.as_nanos() as f64 / 1_000_000_000.0);
+    }
+    print_elapsed_times(&elapsed_nanos, "Serial with RefCellCache");
+    // 並列処理Mutexキャッシュ使用
+    let mut elapsed_nanos = vec![];
+    for _ in 0..repeat_num {
+        let cache = Arc::new(MutexCache::with_len(cache_size));
+        let start = Instant::now();
+        let p = probability_parallel(n, threaded_n, board.clone(), connection_size, &cache);
+        let end = start.elapsed();
+        elapsed_nanos.push(end.as_nanos());
+        println!("p = {} (elapsed: {:.4})", p, end.as_nanos() as f64 / 1_000_000_000.0);
+    }
+    print_elapsed_times(&elapsed_nanos, "Parallel with MutexCache");
+    // 並列処理RwLockキャッシュ使用
+    let mut elapsed_nanos = vec![];
+    for _ in 0..repeat_num {
+        let cache = Arc::new(RwLockCache::with_len(cache_size));
+        let start = Instant::now();
+        let p = probability_parallel(n, threaded_n, board.clone(), connection_size, &cache);
+        let end = start.elapsed();
+        elapsed_nanos.push(end.as_nanos());
+        println!("p = {} (elapsed: {:.4})", p, end.as_nanos() as f64 / 1_000_000_000.0);
+    }
+    print_elapsed_times(&elapsed_nanos, "Parallel with RwLockCache");
 }
