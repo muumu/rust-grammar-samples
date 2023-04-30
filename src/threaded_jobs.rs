@@ -1,6 +1,6 @@
 use std::thread;
 use std::sync::atomic;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use threadpool::ThreadPool;
 use std::sync::mpsc;
 
@@ -65,22 +65,15 @@ fn use_threadpool() {
 }
 
 fn use_atomic() {
-    let n_workers = 4;
-    let n_jobs = 10000;
-    let pool = ThreadPool::new(n_workers);
-    let mut some_big_vec = vec![];
-    for i in 0..n_jobs {
-        some_big_vec.push(Data { n: i as i32 });
-    }
-    let some_big_vec = Arc::new(some_big_vec);
+    const THREAD_NUM: usize = 3;
+    let mut handles = vec![];
     let current_num = Arc::new(atomic::AtomicUsize::new(0));
-    for _ in 0..n_workers {
-        let some_big_vec = Arc::clone(&some_big_vec);
+    for _ in 0..THREAD_NUM {
         let current_num = Arc::clone(&current_num);
-        pool.execute(move || {
+        handles.push(thread::spawn(move || {
             loop {
                 let n = current_num.fetch_add(1, atomic::Ordering::Relaxed);
-                if n >= n_jobs {
+                if n >= 10 {
                     break;
                 }
                 println!("got {}", n);
@@ -94,4 +87,5 @@ pub fn threaded_jobs() {
     spawn_thread_i32_sum();
     spawn_thread();
     use_threadpool();
+    use_atomic();
 }
